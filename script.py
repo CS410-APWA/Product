@@ -11,6 +11,8 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from gensim import corpora, models
+import xlrd
+import re
 
 
 def upload_essays(essay_path):
@@ -60,7 +62,7 @@ def build_dict_of_topics_and_process_compound_terms(essays, sheet_path):
     """
 
     workbook = xlrd.open_workbook(sheet_path)
-    sheet = wb.sheet_by_index(0)
+    sheet = workbook.sheet_by_index(0)
 
     theme_term_dict = {}
 
@@ -86,7 +88,7 @@ def build_dict_of_topics_and_process_compound_terms(essays, sheet_path):
             lemmatized_term = lemmatize_word(spacefree_term)
 
             # Append lemmatized terms.
-            adjusted_score = 10 - sheet.cell_value(i, 2) + 1
+            adjusted_score = 10 - int(sheet.cell_value(i, 2)) + 1
 
             # Store term + score in dictionary (no duplicates).
             if lemmatized_term not in theme_term_dict[current_topic]:
@@ -107,12 +109,12 @@ def tokenize_essays(essays):
         A dicionary of filename (string) -> tokenized corpus (list of strings).
     """
 
-    tokenize_essays = {}
+    tokenized_essays = {}
     for (filename, corpus) in essays.items():
         tokenized_essays[filename] = gensim.utils.simple_preprocess(
             corpus, deacc=True, min_len=2, max_len=20)
 
-    return tokenize_essays
+    return tokenized_essays
 
 
 def lemmatize_word(word):
@@ -144,7 +146,7 @@ def lemmatize_word(word):
         return tag_dict.get(tag, nltk.corpus.wordnet.NOUN)
 
     lemmatizer = nltk.stem.WordNetLemmatizer()
-    lemmatizer.lemmatize(word, get_wordnet_pos(word)
+    lemmatizer.lemmatize(word, get_wordnet_pos(word))
 
     return word
 
@@ -188,7 +190,7 @@ def remove_stopwords(lemmatized_essays):
         stopwords_free_essays[label] = []
         for word in word_lst:
             if word not in english_stopwords + custom_stopwords:
-                stopwords_free_essays.append(word)
+                stopwords_free_essays[label].append(word)
 
     return stopwords_free_essays
 
@@ -268,34 +270,35 @@ def get_essays_per_cluster(cluster_df, num_of_clusters):
 def main():
     # Upload (from some directory) and store the essays.
     root = os.path.dirname(os.path.realpath('__file__'))
-    essay_path = root + '/../essays/'
+    essay_path = root + '/essays/'
     essays = upload_essays(essay_path)
 
     # Read in spreadsheet of topics/defining terms in order to:
     #   1. Build a dictionary of topics w/ defining terms + scores.
     #   2. Preprocess compound defining terms in the essays.
-    spreadsheet_path = "theme_term_dic.xls"
+    spreadsheet_path = "topic_term_sheet.xlsx"
     topic_dict, essays = build_dict_of_topics_and_process_compound_terms(
-                                initial_essays, spreadsheet_path)
+                                essays, spreadsheet_path)
 
     # Tokenize essays.
     essays = tokenize_essays(essays)
 
+
     # Lemmatize all essay tokens.
-    essays = lemmatize_essays(tokenized_essays)
+    essays = lemmatize_essays(essays)
 
     # Remove any tokens identified as stop words.
-    essays = remove_stopwords(lemmatized_essays)
+    essays = remove_stopwords(essays)
 
     # Get the vector representation of essays.
-    vectorized_essays_df = vectorize_essays(stopwords_free_essays)
+    vectorized_essays_df = vectorize_essays(essays)
 
     # Cluster essays using k-means.
     num_of_clusters = 7     # Should maybe be a global var?
 
-    clustered_essays_df = cluster_with_kmeans(vectorized_essays, num_of_clusters,
-                                              essays)
-
+    clustered_essays_df = cluster_with_kmeans(vectorized_essays_df,
+                                              num_of_clusters, essays)
+    
 
 if __name__ == "__main__":
     main()
