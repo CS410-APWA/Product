@@ -20,9 +20,6 @@ from gensim import corpora, models
 NUM_OF_CLUSTERS = 7
 
 
-NUM_OF_CLUSTERS = 7
-
-
 def upload_essays(essay_path):
     """Uploads essays from given path and stores them in a dictionary.
 
@@ -249,48 +246,6 @@ def cluster_with_kmeans(standardized_df, preprocessed_essays):
     return cluster_df
 
 
-<<<<<<< HEAD
-=======
-def get_essays_per_cluster(cluster_df):
-    """
-    Gets all essays corpuses within each of the clusters.
-
-    Args:
-        cluster_df : A DataFrame of essays w/ corresponding cluster number.
-
-    Returns:
-        A dictionary of cluster_id (int) -> essays (list of lists of strings).
-    """
-
-    essays_per_cluster = {}
-
-    for i in range(NUM_OF_CLUSTERS):
-        essays_per_cluster[i] = list(output[output.cluster == i].essay)
-
-    return essays_per_cluster
-
-
-def get_filenames_per_cluster(cluster_df):
-    """
-    Gets all filenames within each of the clusters.
-
-    Args:
-        cluster_df : A DataFrame of essays w/ corresponding cluster number.
-
-    Returns:
-        A dictionary of cluster_id (int) -> filename (string)).
-    """
-
-    filenames_per_cluster = {}
-
-    for i in range(NUM_OF_CLUSTERS):
-        filenames_per_cluster[i] = list(
-                                cluster_df[cluster_df.cluster == i].filename)
-
-    return filenames_per_cluster
-
-
->>>>>>> 92e467a242e2bccb5a6f9622fbc943c2b5a13a1e
 def update_df_with_topic_scores(cluster_df, topic_term_dict):
     """
     Updates the Dataframe containing essays w/ clusters, w/ scores corresponding
@@ -308,15 +263,11 @@ def update_df_with_topic_scores(cluster_df, topic_term_dict):
     for topic in topic_term_dict:
         cluster_df[topic] = 0
 
-<<<<<<< HEAD
     # Get filenames per cluster.
     filenames_per_cluster = {}
     for i in range(NUM_OF_CLUSTERS):
         filenames_per_cluster[i] = list(
                                 cluster_df[cluster_df.cluster == i].filename)
-=======
-    filenames_per_cluster = get_filenames_per_cluster(cluster_df)
->>>>>>> 92e467a242e2bccb5a6f9622fbc943c2b5a13a1e
 
     for i in range(NUM_OF_CLUSTERS):
         for filename in filenames_per_cluster[i]:
