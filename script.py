@@ -1,20 +1,23 @@
 import chardet
 import gensim
+import json
 import nltk
 import os
 import string
 import numpy as np
 import pandas as pd
+import requests
+import sqlite3
+import xlrd
+import re
+from bs4 import BeautifulSoup
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from gensim import corpora, models
-import xlrd
-import re
-import json
-import sqlite3
-import requests
-from bs4 import BeautifulSoup
+
+
+NUM_OF_CLUSTERS = 7
 
 
 NUM_OF_CLUSTERS = 7
@@ -38,6 +41,11 @@ def upload_essays(essay_path):
 
     essays = {}
     for file in files:
+
+        # verify all files are text files
+        if ".txt" not in file:
+            raise TypeError("All essays must be .txt files, error with: "+file)
+
         # Attempt to confidently guess encoding;
         # Otherwise, default to ISO-8859-1.
         encoding = "ISO-8859-1"
@@ -50,39 +58,6 @@ def upload_essays(essay_path):
             essays[file] = f.read()
 
     return essays
-
-
-def lemmatize_word(word):
-    """
-    Converts a given word (string) to its lemmatized version.
-
-    Args:
-        word (string)
-
-    Returns:
-        The lemmatized version of the word (string).
-    """
-
-    def get_wordnet_pos(word):
-        """Map POS tag to first character lemmatize() accepts.
-
-        Args:
-            word (string).
-
-        Returns:
-            A part of speech parameter that charactrizes the given word (char).
-        """
-        tag = nltk.pos_tag([word])[0][1][0].upper()
-        tag_dict = {"J": nltk.corpus.wordnet.ADJ,
-                    "N": nltk.corpus.wordnet.NOUN,
-                    "V": nltk.corpus.wordnet.VERB,
-                    "R": nltk.corpus.wordnet.ADV}
-
-        return tag_dict.get(tag, nltk.corpus.wordnet.NOUN)
-
-    lemmatizer = nltk.stem.WordNetLemmatizer()
-
-    return lemmatizer.lemmatize(word, get_wordnet_pos(word))
 
 
 def build_dict_of_topics_and_process_compound_terms(essays, sheet_path):
@@ -155,6 +130,30 @@ def tokenize_essays(essays):
             corpus, deacc=True, min_len=2, max_len=20)
 
     return tokenized_essays
+
+
+def lemmatize_word(word):
+    """
+    Converts a given word (string) to its lemmatized version.
+
+    Args:
+        word (string)
+
+    Returns:
+        The lemmatized version of the word (string).
+    """
+
+    # determine part of speech of word
+    tag = nltk.pos_tag([word])[0][1][0].upper()
+    tag_dict = {"J": nltk.corpus.wordnet.ADJ,
+                "N": nltk.corpus.wordnet.NOUN,
+                "V": nltk.corpus.wordnet.VERB,
+                "R": nltk.corpus.wordnet.ADV}
+    part_of_speech = tag_dict.get(tag, nltk.corpus.wordnet.NOUN)
+
+    # lemmatize word according to part of speech
+    lemmatizer = nltk.stem.WordNetLemmatizer()
+    return lemmatizer.lemmatize(word, part_of_speech)
 
 
 def lemmatize_essays(tokenized_essays):
@@ -250,6 +249,8 @@ def cluster_with_kmeans(standardized_df, preprocessed_essays):
     return cluster_df
 
 
+<<<<<<< HEAD
+=======
 def get_essays_per_cluster(cluster_df):
     """
     Gets all essays corpuses within each of the clusters.
@@ -289,6 +290,7 @@ def get_filenames_per_cluster(cluster_df):
     return filenames_per_cluster
 
 
+>>>>>>> 92e467a242e2bccb5a6f9622fbc943c2b5a13a1e
 def update_df_with_topic_scores(cluster_df, topic_term_dict):
     """
     Updates the Dataframe containing essays w/ clusters, w/ scores corresponding
@@ -306,7 +308,15 @@ def update_df_with_topic_scores(cluster_df, topic_term_dict):
     for topic in topic_term_dict:
         cluster_df[topic] = 0
 
+<<<<<<< HEAD
+    # Get filenames per cluster.
+    filenames_per_cluster = {}
+    for i in range(NUM_OF_CLUSTERS):
+        filenames_per_cluster[i] = list(
+                                cluster_df[cluster_df.cluster == i].filename)
+=======
     filenames_per_cluster = get_filenames_per_cluster(cluster_df)
+>>>>>>> 92e467a242e2bccb5a6f9622fbc943c2b5a13a1e
 
     for i in range(NUM_OF_CLUSTERS):
         for filename in filenames_per_cluster[i]:
