@@ -1,5 +1,4 @@
 import chardet
-import csv
 import gensim
 import nltk
 import os
@@ -7,7 +6,6 @@ import string
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from gensim import corpora, models
@@ -437,7 +435,7 @@ def create_db_from_df(essay_topic_df):
     # Create essay table.
     table = "Essays"
     pd.set_option("display.max_colwidth", 10000)
-    essay_topic_df['link'] = essay_topic_df['title'].map(
+    essay_topic_df['link'] = essay_topic_df['filename'].map(
         lambda x: "https://apw.dhinitiative.org/islandora/object/apw%3A" + x[
                                                         4:x.find('.')] + "?")
     essay_topic_df['title'] = essay_topic_df['link'].map(
