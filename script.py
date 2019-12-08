@@ -13,6 +13,10 @@ from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from gensim import corpora, models
 import xlrd
 import re
+import json
+import sqlite3
+import requests
+from bs4 import BeautifulSoup
 
 
 def upload_essays(essay_path):
@@ -404,9 +408,58 @@ def update_essay_rank(cluster_df, topic_term_dict, num_clusters):
                 # from localcentroid to globalcentroid
                 cluster_df.at[ident, topic] = cluster_df.at[ident, topic] * d1 * d2
 
-    all_we_need = cluster_df.iloc[:, 102:]
+    essay_topic_df = cluster_df.iloc[:, 102:]
 
-    return all_we_need
+    return essay_topic_df
+
+
+def create_db_from_df(essay_topic_df):
+    """
+    Creates a sqlite3 database from given essay dataframe.
+
+    Args:
+        essay_topic_df: A dataframe with essay scores w.r.t topics.
+
+    Returns:
+        A sqlite3 database with the essays as rows and topic as columns. Each
+        essay has an associated score corresponding to each of the topics.
+    """
+
+    # Remove database if it already exists in the directory.
+    exists = os.path.isfile("db.sqlite3")
+    if exists:
+        os.remove("db.sqlite3")
+
+    # Connect to the database.
+    conn = sqlite3.connect("db.sqlite3")
+    c = conn.cursor()
+
+    # Create essay table.
+    table = "Essays"
+    pd.set_option("display.max_colwidth", 10000)
+    essay_topic_df['link'] = essay_topic_df['title'].map(
+        lambda x: "https://apw.dhinitiative.org/islandora/object/apw%3A" + x[
+                                                        4:x.find('.')] + "?")
+    essay_topic_df['title'] = essay_topic_df['link'].map(
+        lambda x: BeautifulSoup(requests.get(x).text).find('h1'))
+
+    index_names = []
+    for index, row in essay_topic_df.iterrows():
+    	try:
+    		row['title'].text
+    	except:
+    		index_names.append(index)
+
+    essay_topic_df.drop(index_names, inplace=True)
+    essay_topic_df['title'] = essay_topic_df['title'].map(lambda x: x.text)
+
+    essay_topic_df.to_sql(table, conn)
+
+    # Commit changes.
+    conn.commit()
+
+    # Close the connection to the database file.
+    conn.close()
 
 
 def main():
@@ -447,8 +500,11 @@ def main():
                                     num_of_clusters, topic_dict)
 
     # Adjust the initially assigned scores.
-    all_we_need = update_essay_rank(essay_with_topic_scores_df,
+    essay_topic_df = update_essay_rank(essay_with_topic_scores_df,
                                     topic_dict, num_of_clusters)
+
+    # Create essay database in current directory.
+    create_db_from_df(essay_topic_df)
 
 
 if __name__ == "__main__":
