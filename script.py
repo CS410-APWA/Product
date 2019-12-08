@@ -47,76 +47,6 @@ def upload_essays(essay_path):
     return essays
 
 
-def build_dict_of_topics_and_process_compound_terms(essays, sheet_path):
-    """
-        - Reads a spreadsheet of topics/defining terms, and builds a Dictionary of
-    topic -> (defining_term -> score).
-        - Checks for compound defining terms and processes them in essays.
-
-    Args:
-        essays: Dictionary of filename (string) -> essay (string).
-
-    Returns:
-        A tuple: Dictionary of topics, Dictionary of essays w/ procecessed
-        compound terms.
-    """
-
-    workbook = xlrd.open_workbook(sheet_path)
-    sheet = workbook.sheet_by_index(0)
-
-    theme_term_dict = {}
-
-    # Read the first column (TOPIC) and add topics as keys to the dictionary.
-    current_topic = ""
-    for i in range(1, sheet.nrows):
-        topic = sheet.cell_value(i, 0)
-        if topic:
-            theme_term_dict[topic] = {}
-            current_topic = topic
-
-        term = sheet.cell_value(i, 1)
-        if term:
-            # Compound ? If yes, remove spacing.
-            if ' ' in term:
-                spacefree_term = ''.join(term.split(' '))
-
-                # Replace all occurences of compound terms by removing spaces.
-                for (label, corpus) in essays.items():
-                    re.sub(term, spacefree_term, corpus)
-
-            # Lemmatize.
-            lemmatized_term = lemmatize_word(spacefree_term)
-
-            # Append lemmatized terms.
-            adjusted_score = 10 - int(sheet.cell_value(i, 2)) + 1
-
-            # Store term + score in dictionary (no duplicates).
-            if lemmatized_term not in theme_term_dict[current_topic]:
-                theme_term_dict[current_topic][lemmatized_term] = adjusted_score
-
-    return theme_term_dict, essays
-
-
-def tokenize_essays(essays):
-    """
-    Converts each essay from a string to a list of strings (tokens), while
-    disregarding words that are too short/long.
-
-    Args:
-        essays: A dictionary of filename (string) -> essay corpus (string).
-
-    Returns:
-        A dicionary of filename (string) -> tokenized corpus (list of strings).
-    """
-
-    tokenized_essays = {}
-    for (filename, corpus) in essays.items():
-        tokenized_essays[filename] = gensim.utils.simple_preprocess(
-            corpus, deacc=True, min_len=2, max_len=20)
-
-    return tokenized_essays
-
-
 def lemmatize_word(word):
     """
     Converts a given word (string) to its lemmatized version.
@@ -146,9 +76,80 @@ def lemmatize_word(word):
         return tag_dict.get(tag, nltk.corpus.wordnet.NOUN)
 
     lemmatizer = nltk.stem.WordNetLemmatizer()
-    lemmatizer.lemmatize(word, get_wordnet_pos(word))
 
-    return word
+    return lemmatizer.lemmatize(word, get_wordnet_pos(word))
+
+
+def build_dict_of_topics_and_process_compound_terms(essays, sheet_path):
+    """
+        - Reads a spreadsheet of topics/defining terms, and builds a Dictionary of
+    topic -> (defining_term -> score).
+        - Checks for compound defining terms and processes them in essays.
+
+    Args:
+        essays: Dictionary of filename (string) -> essay (string).
+
+    Returns:
+        A tuple: Dictionary of topics, Dictionary of essays w/ procecessed
+        compound terms.
+    """
+
+    workbook = xlrd.open_workbook(sheet_path)
+    sheet = workbook.sheet_by_index(0)
+
+    topic_term_dict = {}
+
+    # Read the first column (TOPIC) and add topics as keys to the dictionary.
+    current_topic = ""
+    for i in range(1, sheet.nrows):
+        topic = sheet.cell_value(i, 0)
+        if topic:
+            topic_term_dict[topic] = {}
+            current_topic = topic
+
+        term = sheet.cell_value(i, 1)
+        if term:
+            # Compound ? If yes, remove spacing.
+            if ' ' in term:
+                spacefree_term = ''.join(term.split(' '))
+
+                # Replace all occurences of compound terms by removing spaces.
+                for (label, corpus) in essays.items():
+                    essays[label] = re.sub(term, spacefree_term, corpus)
+
+                term = spacefree_term
+
+            # Lemmatize.
+            lemmatized_term = lemmatize_word(term)
+
+            # Append lemmatized terms.
+            adjusted_score = 10 - int(sheet.cell_value(i, 2)) + 1
+
+            # Store term + score in dictionary (no duplicates).
+            if lemmatized_term not in topic_term_dict[current_topic]:
+                topic_term_dict[current_topic][lemmatized_term] = adjusted_score
+
+    return topic_term_dict, essays
+
+
+def tokenize_essays(essays):
+    """
+    Converts each essay from a string to a list of strings (tokens), while
+    disregarding words that are too short/long.
+
+    Args:
+        essays: A dictionary of filename (string) -> essay corpus (string).
+
+    Returns:
+        A dicionary of filename (string) -> tokenized corpus (list of strings).
+    """
+
+    tokenized_essays = {}
+    for (filename, corpus) in essays.items():
+        tokenized_essays[filename] = gensim.utils.simple_preprocess(
+            corpus, deacc=True, min_len=2, max_len=20)
+
+    return tokenized_essays
 
 
 def lemmatize_essays(tokenized_essays):
@@ -217,10 +218,7 @@ def vectorize_essays(preprocessed_essays):
 
     # Feature scaling through standardization.
     stdsclr = StandardScaler()
-    standardized_df = pd.DataFrame(
-            stdsclr.fit_transform(vectorized_df.astype(float)))
-
-    return standardized_df
+    return pd.DataFrame(stdsclr.fit_transform(vectorized_df.astype(float)))
 
 
 def cluster_with_kmeans(standardized_df, num_of_clusters, preprocessed_essays):
@@ -360,12 +358,11 @@ def update_essay_rank(cluster_df, topic_term_dict, num_clusters):
     Returns:
 
     """
-    def distance(v1, v2):
-        # L2 norm
-        return np.linalg.norm(v1-v2)
+
+    def calculate_L2_norm(v1, v2): return np.linalg.norm(v1-v2)
 
     # calculate global centroids for each topic
-    topic_globcentroid = {}
+    global_centroid_by_topic = {}
 
     for topic in topic_term_dict.keys():
         # get all vector columns matching topic
@@ -375,8 +372,8 @@ def update_essay_rank(cluster_df, topic_term_dict, num_clusters):
         n = len(sub_df)
 
         # mean of all vectors is centroid
-        globalcentroid = sum([sub_df.iloc[i] for i in range(n)])/n
-        topic_globcentroid[topic] = globalcentroid
+        global_centroid = sum([sub_df.iloc[i] for i in range(n)])/n
+        global_centroid_by_topic[topic] = global_centroid
 
     # calculate local centroids for each topic
     for cluster in range(num_clusters):
@@ -393,7 +390,7 @@ def update_essay_rank(cluster_df, topic_term_dict, num_clusters):
 
             # find distance between current localcentroid and its corresponding
             # globalcentoid by topic
-            d1 = distance(topic_globcentroid[topic], localcentroid)
+            d1 = calculate_L2_norm(global_centroid_by_topic[topic], localcentroid)
 
             # find distance between each vector and its corresponding
             # localcentroid, update rank
@@ -401,7 +398,7 @@ def update_essay_rank(cluster_df, topic_term_dict, num_clusters):
             vectors = vectors[vectors[topic] != 0].index
             for ident in vectors:
                 loc = cluster_df.iloc[ident, :100]
-                d2 = distance(loc, localcentroid)
+                d2 = calculate_L2_norm(loc, localcentroid)
 
                 # update rank - lda score * dist from v to localcentroid * dist
                 # from localcentroid to globalcentroid
@@ -427,7 +424,6 @@ def main():
 
     # Tokenize essays.
     essays = tokenize_essays(essays)
-
 
     # Lemmatize all essay tokens.
     essays = lemmatize_essays(essays)
