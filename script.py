@@ -17,6 +17,9 @@ import requests
 from bs4 import BeautifulSoup
 
 
+NUM_OF_CLUSTERS = 7
+
+
 def upload_essays(essay_path):
     """Uploads essays from given path and stores them in a dictionary.
 
@@ -223,13 +226,12 @@ def vectorize_essays(preprocessed_essays):
     return pd.DataFrame(stdsclr.fit_transform(vectorized_df.astype(float)))
 
 
-def cluster_with_kmeans(standardized_df, num_of_clusters, preprocessed_essays):
+def cluster_with_kmeans(standardized_df, preprocessed_essays):
     """
     Partitions essays into clusters using k-means.
 
     Args:
         standardized_df: Vector representation of essays (DataFrame).
-        num_of_clusters: Predetermined number of cluster (int).
         preprocessed_essays: Dictionary of essays (filename -> corpus tokens).
 
     Returns:
@@ -237,7 +239,7 @@ def cluster_with_kmeans(standardized_df, num_of_clusters, preprocessed_essays):
         (row: essays, cols: cluster id, essay corpus, filename).
     """
 
-    kmeans = KMeans(n_clusters=num_of_clusters, init="k-means++", max_iter=100)
+    kmeans = KMeans(n_clusters=NUM_OF_CLUSTERS, init="k-means++", max_iter=100)
     kmeans.fit(standardized_df.values)
 
     cluster_df = standardized_df
@@ -248,13 +250,12 @@ def cluster_with_kmeans(standardized_df, num_of_clusters, preprocessed_essays):
     return cluster_df
 
 
-def get_essays_per_cluster(cluster_df, num_of_clusters):
+def get_essays_per_cluster(cluster_df):
     """
     Gets all essays corpuses within each of the clusters.
 
     Args:
         cluster_df : A DataFrame of essays w/ corresponding cluster number.
-        num_of_clusters : Predetermined number of cluster (int).
 
     Returns:
         A dictionary of cluster_id (int) -> essays (list of lists of strings).
@@ -262,19 +263,18 @@ def get_essays_per_cluster(cluster_df, num_of_clusters):
 
     essays_per_cluster = {}
 
-    for i in range(num_clusters):
+    for i in range(NUM_OF_CLUSTERS):
         essays_per_cluster[i] = list(output[output.cluster == i].essay)
 
     return essays_per_cluster
 
 
-def get_filenames_per_cluster(cluster_df, num_of_clusters):
+def get_filenames_per_cluster(cluster_df):
     """
     Gets all filenames within each of the clusters.
 
     Args:
         cluster_df : A DataFrame of essays w/ corresponding cluster number.
-        num_of_clusters : Predetermined number of cluster (int).
 
     Returns:
         A dictionary of cluster_id (int) -> filename (string)).
@@ -282,21 +282,20 @@ def get_filenames_per_cluster(cluster_df, num_of_clusters):
 
     filenames_per_cluster = {}
 
-    for i in range(num_of_clusters):
+    for i in range(NUM_OF_CLUSTERS):
         filenames_per_cluster[i] = list(
                                 cluster_df[cluster_df.cluster == i].filename)
 
     return filenames_per_cluster
 
 
-def update_df_with_topic_scores(cluster_df, num_of_clusters, topic_term_dict):
+def update_df_with_topic_scores(cluster_df, topic_term_dict):
     """
     Updates the Dataframe containing essays w/ clusters, w/ scores corresponding
     to the topics.
 
     Args:
         cluster_df : A DataFrame of essays w/ corresponding cluster number.
-        num_of_clusters : Predetermined number of cluster (int).
         topic_term_dict : Dictionary of topics w/ defining terms.
 
     Returns:
@@ -307,9 +306,9 @@ def update_df_with_topic_scores(cluster_df, num_of_clusters, topic_term_dict):
     for topic in topic_term_dict:
         cluster_df[topic] = 0
 
-    filenames_per_cluster = get_filenames_per_cluster(cluster_df,
-                                                      num_of_clusters)
-    for i in range(num_of_clusters):
+    filenames_per_cluster = get_filenames_per_cluster(cluster_df)
+
+    for i in range(NUM_OF_CLUSTERS):
         for filename in filenames_per_cluster[i]:
             essay = list(cluster_df[cluster_df.filename == filename].essay)
             dictionary = corpora.Dictionary(essay)
@@ -351,64 +350,65 @@ def update_df_with_topic_scores(cluster_df, num_of_clusters, topic_term_dict):
     return cluster_df
 
 
-def update_essay_rank(cluster_df, topic_term_dict, num_clusters):
+def update_essay_rank(cluster_df, topic_term_dict):
     """
-    Ranks the essays by ... (Matt?)
+    Update essay rank by multiplying topic strength by distance to local and
+    global topic centroids.
 
     Args:
+        cluster_df : A DataFrame of essays w/ corresponding cluster number.
+        topic_term_dict : Dictionary of topics w/ defining terms.
 
     Returns:
-
+        An updated version of the given dataframe (cluster_df), updating rank
+        and removing 100-dim vector for each essay.
     """
 
-    def calculate_L2_norm(v1, v2): return np.linalg.norm(v1-v2)
+    def calculate_distance(v1, v2):
+        """ calculate L2 norm (Euclidean distance) between two vectors """
+        return np.linalg.norm(v1-v2)
+
+    def calculate_centroid(df, topic):
+        """ calculate centroid of vectors in df that have passed topic """
+        # get all essays that match topic
+        topic_df = df[df[topic] != 0].iloc[:, :100]
+
+        # number of vectors with that topic
+        n = len(topic_df)
+
+        # calculate mean vector
+        return sum([topic_df.iloc[i] for i in range(n)])/n
 
     # calculate global centroids for each topic
     global_centroid_by_topic = {}
-
     for topic in topic_term_dict.keys():
-        # get all vector columns matching topic
-        sub_df = cluster_df[cluster_df[topic] != 0].iloc[:, :100]
+        global_centroid_by_topic[topic] = calculate_centroid(cluster_df, topic)
 
-        # number of vectors with that topic
-        n = len(sub_df)
+    # update rankings
+    for cluster in range(NUM_OF_CLUSTERS):
+        # get essays within cluster
+        sub_df = cluster_df[cluster_df['cluster'] == cluster]
 
-        # mean of all vectors is centroid
-        global_centroid = sum([sub_df.iloc[i] for i in range(n)])/n
-        global_centroid_by_topic[topic] = global_centroid
-
-    # calculate local centroids for each topic
-    for cluster in range(num_clusters):
         for topic in topic_term_dict.keys():
-            # get all vector columns matching cluster and topic
-            sub_df = cluster_df[cluster_df['cluster'] == cluster]
-            sub_df = sub_df[sub_df[topic] != 0].iloc[:, :100]
+            # calculate local centroid within cluster by topic
+            local_centroid = calculate_centroid(sub_df, topic)
 
-            # number of vectors in cluster with this topic
-            n = len(sub_df)
+            # distance between topic local_centroid and global_centroid
+            d1 = calculate_distance(global_centroid_by_topic[topic],
+                                    local_centroid)
 
-            # mean of all vectors is centroid with this topic
-            localcentroid = sum([sub_df.iloc[i] for i in range(n)])/n
+            # iterate across all essays that contain topic within cluster
+            for essay in sub_df[sub_df[topic] != 0].index:
+                essay_vector = cluster_df.iloc[essay, :100]
 
-            # find distance between current localcentroid and its corresponding
-            # globalcentoid by topic
-            d1 = calculate_L2_norm(global_centroid_by_topic[topic], localcentroid)
+                # calculate distance from essay to local_centroid
+                d2 = calculate_distance(essay_vector, local_centroid)
 
-            # find distance between each vector and its corresponding
-            # localcentroid, update rank
-            vectors = cluster_df[cluster_df['cluster'] == cluster]
-            vectors = vectors[vectors[topic] != 0].index
-            for ident in vectors:
-                loc = cluster_df.iloc[ident, :100]
-                d2 = calculate_L2_norm(loc, localcentroid)
+                # update ranking, multiply by distances
+                cluster_df.at[essay, topic] = cluster_df.at[essay, topic]*d1*d2
 
-                # update rank - lda score * dist from v to localcentroid * dist
-                # from localcentroid to globalcentroid
-                cluster_df.at[ident, topic] = cluster_df.at[ident, topic] * d1 * d2
-
-    essay_topic_df = cluster_df.iloc[:, 102:]
-
-    return essay_topic_df
+    # drop 100-dim vectors from dataframe, keep only essay name and scores
+    return cluster_df.iloc[:, 102:]
 
 
 def create_db_from_df(essay_topic_df):
@@ -486,20 +486,16 @@ def main():
     vectorized_essays_df = vectorize_essays(essays)
 
     # Cluster essays using k-means.
-    num_of_clusters = 7     # Should maybe be a global var?
-
     essays_with_assigned_cluster_df = cluster_with_kmeans(vectorized_essays_df,
-                                                          num_of_clusters,
                                                           essays)
 
     # For each essay, assign an initial score to each of its relevent topics.
     essay_with_topic_scores_df = update_df_with_topic_scores(
                                     essays_with_assigned_cluster_df,
-                                    num_of_clusters, topic_dict)
+                                    topic_dict)
 
     # Adjust the initially assigned scores.
-    essay_topic_df = update_essay_rank(essay_with_topic_scores_df,
-                                    topic_dict, num_of_clusters)
+    essay_topic_df = update_essay_rank(essay_with_topic_scores_df, topic_dict)
 
     # Create essay database in current directory.
     create_db_from_df(essay_topic_df)
