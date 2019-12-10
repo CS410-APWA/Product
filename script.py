@@ -395,14 +395,17 @@ def create_db_from_df(essay_topic_df):
 
     # Create essay table.
     table = "Essays"
+    #keep the links from getting cut short
     pd.set_option("display.max_colwidth", 10000)
     essay_topic_df['link'] = essay_topic_df['filename'].map(
         lambda x: "https://apw.dhinitiative.org/islandora/object/apw%3A" + x[
                                                         4:x.find('.')] + "?")
+    #scrape the title from the apwa website
     essay_topic_df['title'] = essay_topic_df['link'].map(
         lambda x: BeautifulSoup(requests.get(x).text).find('h1'))
 
     index_names = []
+    #make sure the link works, if not just don't include it
     for index, row in essay_topic_df.iterrows():
     	try:
     		row['title'].text
