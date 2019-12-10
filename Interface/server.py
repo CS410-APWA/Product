@@ -86,7 +86,7 @@ def get_topic():
       #print("Query essays of topic {}." % topic)
       query_results = select_essays_with_topic(conn, topic)
       results = Markup(makeHtml(query_results))
-      return render_template('results.html', results=results)
+      return render_template('results.html', results=results, topic=topic)
 
 
 if __name__ == '__main__':
