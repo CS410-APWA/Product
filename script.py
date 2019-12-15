@@ -17,6 +17,7 @@ from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from gensim import corpora, models
 
 
+# Number used to split essays into clusters.
 NUM_OF_CLUSTERS = 7
 
 
@@ -30,16 +31,15 @@ def upload_essays(essay_path):
         A dictionary of filename (string) -> essay corpus (string).
 
     Raises:
-        Error if path to essay directory is not valid.
+        TypeError if non-text file found in the essay directory.
     """
-
     # Should raise error if path not valid: maybe use try/except?
     files = os.listdir(essay_path)
 
     essays = {}
     for file in files:
 
-        # verify all files are text files
+        # Verify all files are text files.
         if ".txt" not in file:
             raise TypeError("All essays must be .txt files, error with: "+file)
 
@@ -331,44 +331,44 @@ def update_essay_rank(cluster_df, topic_term_dict):
 
     def calculate_centroid(df, topic):
         """ calculate centroid of vectors in df that have passed topic """
-        # get all essays that match topic
+        # Get all essays that match topic.
         topic_df = df[df[topic] != 0].iloc[:, :100]
 
-        # number of vectors with that topic
+        # Get number of vectors with that topic.
         n = len(topic_df)
 
-        # calculate mean vector
+        # Calculate mean vector.
         return sum([topic_df.iloc[i] for i in range(n)])/n
 
-    # calculate global centroids for each topic
+    # Calculate global centroids for each topic.
     global_centroid_by_topic = {}
     for topic in topic_term_dict.keys():
         global_centroid_by_topic[topic] = calculate_centroid(cluster_df, topic)
 
-    # update rankings
+    # Update essay rankings.
     for cluster in range(NUM_OF_CLUSTERS):
         # get essays within cluster
         sub_df = cluster_df[cluster_df['cluster'] == cluster]
 
         for topic in topic_term_dict.keys():
-            # calculate local centroid within cluster by topic
+            # Calculate local centroid within cluster by topic.
             local_centroid = calculate_centroid(sub_df, topic)
 
-            # distance between topic local_centroid and global_centroid
+            # Calculate dist between topic local_centroid and global_centroid.
             d1 = calculate_distance(global_centroid_by_topic[topic],
                                     local_centroid)
 
-            # iterate across all essays that contain topic within cluster
+            # Iterate across all essays that contain topic within cluster.
             for essay in sub_df[sub_df[topic] != 0].index:
                 essay_vector = cluster_df.iloc[essay, :100]
 
-                # calculate distance from essay to local_centroid
+                # Calculate distance from essay to local_centroid.
                 d2 = calculate_distance(essay_vector, local_centroid)
 
-                # update ranking, multiply by distances
+                # Update ranking, multiply by distances.
                 cluster_df.at[essay, topic] = cluster_df.at[essay, topic]*d1*d2
 
-    # drop 100-dim vectors from dataframe, keep only essay name and scores
+    # Drop 100-dim vectors from dataframe, keep only essay filenames and scores.
     return cluster_df.iloc[:, 102:]
 
 
