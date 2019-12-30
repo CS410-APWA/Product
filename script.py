@@ -22,7 +22,7 @@ NUM_OF_CLUSTERS = 7
 
 
 def upload_essays(essay_path):
-    """Uploads essays from given path and stores them in a dictionary.
+    """Uploads essays from a given path and stores them in a dictionary.
 
     Args:
         essay_path: A string representing the path to the essays directory.
